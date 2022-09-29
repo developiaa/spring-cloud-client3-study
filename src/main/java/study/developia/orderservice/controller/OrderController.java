@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import study.developia.orderservice.dto.OrderDto;
 import study.developia.orderservice.jpa.OrderEntity;
+import study.developia.orderservice.messagequeue.KafkaProducer;
 import study.developia.orderservice.service.OrderService;
 import study.developia.orderservice.vo.RequestOrder;
 import study.developia.orderservice.vo.ResponseOrder;
@@ -23,6 +24,8 @@ public class OrderController {
     private final Environment env;
     private final OrderService orderService;
 
+    private final KafkaProducer kafkaProducer;
+
     @GetMapping("/health-check")
     public String status() {
         return String.format("It's Working in Catalog service %s", env.getProperty("local.server.port"));
@@ -34,11 +37,15 @@ public class OrderController {
         ModelMapper mapper = new ModelMapper();
         mapper.getConfiguration().setMatchingStrategy(MatchingStrategies.STRICT);
 
+        // jpa
         OrderDto orderDto = mapper.map(orderDetails, OrderDto.class);
         orderDto.setUserId(userId);
         OrderDto createdOrder = orderService.createOrder(orderDto);
 
         ResponseOrder responseOrder = mapper.map(createdOrder, ResponseOrder.class);
+
+        // send this order to the kafka
+        kafkaProducer.send("example-catalog-topic", orderDto);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(responseOrder);
     }
