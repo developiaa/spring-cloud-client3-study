@@ -10,12 +10,14 @@ import org.springframework.web.bind.annotation.*;
 import study.developia.orderservice.dto.OrderDto;
 import study.developia.orderservice.jpa.OrderEntity;
 import study.developia.orderservice.messagequeue.KafkaProducer;
+import study.developia.orderservice.messagequeue.OrderProducer;
 import study.developia.orderservice.service.OrderService;
 import study.developia.orderservice.vo.RequestOrder;
 import study.developia.orderservice.vo.ResponseOrder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -25,6 +27,7 @@ public class OrderController {
     private final OrderService orderService;
 
     private final KafkaProducer kafkaProducer;
+    private final OrderProducer orderProducer;
 
     @GetMapping("/health-check")
     public String status() {
@@ -37,15 +40,21 @@ public class OrderController {
         ModelMapper mapper = new ModelMapper();
         mapper.getConfiguration().setMatchingStrategy(MatchingStrategies.STRICT);
 
-        // jpa
         OrderDto orderDto = mapper.map(orderDetails, OrderDto.class);
         orderDto.setUserId(userId);
-        OrderDto createdOrder = orderService.createOrder(orderDto);
+        // jpa
+//        OrderDto createdOrder = orderService.createOrder(orderDto);
+//        ResponseOrder responseOrder = mapper.map(createdOrder, ResponseOrder.class);
 
-        ResponseOrder responseOrder = mapper.map(createdOrder, ResponseOrder.class);
+        // kafka
+        orderDto.setOrderId(UUID.randomUUID().toString());
+        orderDto.setTotalPrice(orderDetails.getQty() * orderDetails.getUnitPrice());
 
         // send this order to the kafka
         kafkaProducer.send("example-catalog-topic", orderDto);
+        orderProducer.send("orders", orderDto);
+
+        ResponseOrder responseOrder = mapper.map(orderDto, ResponseOrder.class);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(responseOrder);
     }
